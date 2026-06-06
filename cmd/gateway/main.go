@@ -65,6 +65,7 @@ func main() {
 		Enabled:   cfg.Demo.EnableTestCompletion,
 	})
 	mux.Handle("/grants/verify", &gateway.GrantVerifyHandler{Grants: srv.Grants()})
+	mux.Handle("/.well-known/agent-paywall-key", &gateway.PublicKeyHandler{Grants: srv.Grants()})
 	mux.Handle("/.well-known/data-residency", &gateway.DataResidencyHandler{Statement: statement})
 	mux.Handle("/webhooks/payment", &gateway.WebhookHandler{
 		Grants: srv.Grants(),

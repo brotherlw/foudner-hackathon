@@ -25,7 +25,7 @@ func PaywallMiddleware(cfg PaywallConfig, resource ResourceConfig, grants *Grant
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		grantToken := extractGrantToken(r)
 		if grantToken != "" {
-			if _, err := grants.VerifyGrant(grantToken, resource.Path); err == nil {
+			if _, err := grants.ConsumeGrant(grantToken, resource.Path); err == nil {
 				appendLedger(cfg.Ledger, ledger.Event{
 					Type:         "access_granted",
 					ResourcePath: resource.Path,

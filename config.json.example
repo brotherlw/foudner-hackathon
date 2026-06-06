@@ -4,6 +4,8 @@
     "listen_addr": ":3001",
     "grant_secret": "dev-only-change-me",
     "grant_ttl_seconds": 3600,
+    "grant_private_key_path": "secrets/grant-ed25519.key",
+    "grant_quota": 1,
     "base_url": "http://localhost:3001"
   },
   "wallet": {

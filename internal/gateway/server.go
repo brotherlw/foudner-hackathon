@@ -31,13 +31,17 @@ type paymentMeta struct {
 
 func NewServer(cfg *config.Config, provider payments.PaymentProvider, ledgers ...ledger.Ledger) *Server {
 	ttl := time.Duration(cfg.Gateway.GrantTTLSeconds) * time.Second
+	grants, err := NewGrantStoreFromKeyFile(cfg.Gateway.GrantPrivateKeyPath, ttl, cfg.Gateway.GrantQuota)
+	if err != nil {
+		panic(fmt.Sprintf("grant key: %v", err))
+	}
 	l := ledger.Ledger(ledger.NopLedger{})
 	if len(ledgers) > 0 && ledgers[0] != nil {
 		l = ledgers[0]
 	}
 	return &Server{
 		cfg:      cfg,
-		grants:   NewGrantStore(cfg.Gateway.GrantSecret, ttl),
+		grants:   grants,
 		ledger:   l,
 		provider: provider,
 		payments: make(map[string]paymentMeta),

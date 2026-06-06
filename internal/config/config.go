@@ -23,10 +23,12 @@ type Config struct {
 }
 
 type GatewayConfig struct {
-	ListenAddr      string `json:"listen_addr"`
-	GrantSecret     string `json:"grant_secret"`
-	GrantTTLSeconds int    `json:"grant_ttl_seconds"`
-	BaseURL         string `json:"base_url"`
+	ListenAddr          string `json:"listen_addr"`
+	GrantSecret         string `json:"grant_secret"`
+	GrantTTLSeconds     int    `json:"grant_ttl_seconds"`
+	GrantPrivateKeyPath string `json:"grant_private_key_path"`
+	GrantQuota          int    `json:"grant_quota"`
+	BaseURL             string `json:"base_url"`
 }
 
 type WalletConfig struct {
@@ -96,6 +98,14 @@ func applyEnv(cfg *Config) {
 			cfg.Gateway.GrantTTLSeconds = n
 		}
 	}
+	if v := os.Getenv("GRANT_PRIVATE_KEY_PATH"); v != "" {
+		cfg.Gateway.GrantPrivateKeyPath = v
+	}
+	if v := os.Getenv("GRANT_QUOTA"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Gateway.GrantQuota = n
+		}
+	}
 	if v := os.Getenv("LEDGER_PATH"); v != "" {
 		cfg.Ledger.Path = v
 	}
@@ -125,6 +135,12 @@ func (c *Config) validate() error {
 	}
 	if c.Gateway.GrantTTLSeconds == 0 {
 		c.Gateway.GrantTTLSeconds = 3600
+	}
+	if c.Gateway.GrantPrivateKeyPath == "" {
+		c.Gateway.GrantPrivateKeyPath = "secrets/grant-ed25519.key"
+	}
+	if c.Gateway.GrantQuota == 0 {
+		c.Gateway.GrantQuota = 1
 	}
 	if c.Gateway.BaseURL == "" {
 		c.Gateway.BaseURL = "http://localhost:3001"
@@ -243,10 +259,12 @@ func Default() *Config {
 	return &Config{
 		Currency: "EUR",
 		Gateway: GatewayConfig{
-			ListenAddr:      ":3001",
-			GrantSecret:     "dev-only-change-me",
-			GrantTTLSeconds: 3600,
-			BaseURL:         "http://localhost:3001",
+			ListenAddr:          ":3001",
+			GrantSecret:         "dev-only-change-me",
+			GrantTTLSeconds:     3600,
+			GrantPrivateKeyPath: "",
+			GrantQuota:          1,
+			BaseURL:             "http://localhost:3001",
 		},
 		Wallet: WalletConfig{
 			DailyBudget:      5.00,

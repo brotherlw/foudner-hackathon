@@ -5,6 +5,7 @@
 config.json
 DATA-RESIDENCY-LIVE.md
 /ledger/
+/secrets/
 
 # Go
 *.exe
