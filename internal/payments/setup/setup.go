@@ -14,7 +14,7 @@ func NewProvider(cfg *config.Config) (payments.PaymentProvider, error) {
 	case "mock":
 		return mock.NewProvider(cfg.Mollie.WebhookURL), nil
 	case "mollie":
-		return mollieprovider.NewProvider(cfg.Mollie.APIKeyEnv, cfg.Mollie.WebhookURL)
+		return mollieprovider.NewProvider(cfg.Mollie.APIKeyEnv, cfg.Mollie.WebhookURL, cfg.Mollie.RedirectURL)
 	default:
 		return nil, fmt.Errorf("unknown payment provider: %s", cfg.Provider)
 	}

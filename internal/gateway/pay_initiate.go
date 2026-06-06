@@ -15,8 +15,9 @@ type InitiateRequest struct {
 }
 
 type InitiateResponse struct {
-	PaymentID string `json:"payment_id"`
-	Status    string `json:"status"`
+	PaymentID   string `json:"payment_id"`
+	Status      string `json:"status"`
+	CheckoutURL string `json:"checkout_url,omitempty"`
 }
 
 type PaymentInitiator interface {

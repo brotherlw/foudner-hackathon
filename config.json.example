@@ -13,7 +13,8 @@
   "provider": "mock",
   "mollie": {
     "api_key_env": "MOLLIE_API_KEY",
-    "webhook_url": "http://localhost:3001/webhooks/payment"
+    "webhook_url": "http://localhost:3001/webhooks/payment",
+    "redirect_url": "http://localhost:3001/payment/return"
   },
   "ledger": {
     "path": "ledger/events.jsonl"
@@ -23,6 +24,9 @@
     "allowed_sub_processors": ["mollie.com"],
     "ip_hash_salt": "dev-only-change-me",
     "storage_location": "local append-only JSONL ledger"
+  },
+  "demo": {
+    "enable_test_completion": true
   },
   "protected_resources": [
     {

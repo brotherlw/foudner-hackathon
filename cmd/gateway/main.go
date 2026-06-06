@@ -60,6 +60,10 @@ func main() {
 	}
 
 	mux.Handle("/pay/initiate", &gateway.PayInitiateHandler{Initiator: srv})
+	mux.Handle("/pay/complete-test", &gateway.CompleteTestPaymentHandler{
+		Completer: srv,
+		Enabled:   cfg.Demo.EnableTestCompletion,
+	})
 	mux.Handle("/grants/verify", &gateway.GrantVerifyHandler{Grants: srv.Grants()})
 	mux.Handle("/.well-known/data-residency", &gateway.DataResidencyHandler{Statement: statement})
 	mux.Handle("/webhooks/payment", &gateway.WebhookHandler{

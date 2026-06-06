@@ -18,6 +18,7 @@ type Config struct {
 	Mollie             MollieConfig        `json:"mollie"`
 	Ledger             LedgerConfig        `json:"ledger"`
 	DataResidency      DataResidencyConfig `json:"data_residency"`
+	Demo               DemoConfig          `json:"demo"`
 	ProtectedResources []ProtectedResource `json:"protected_resources"`
 }
 
@@ -34,8 +35,9 @@ type WalletConfig struct {
 }
 
 type MollieConfig struct {
-	APIKeyEnv  string `json:"api_key_env"`
-	WebhookURL string `json:"webhook_url"`
+	APIKeyEnv   string `json:"api_key_env"`
+	WebhookURL  string `json:"webhook_url"`
+	RedirectURL string `json:"redirect_url"`
 }
 
 type LedgerConfig struct {
@@ -47,6 +49,10 @@ type DataResidencyConfig struct {
 	AllowedSubProcessors []string `json:"allowed_sub_processors"`
 	IPHashSalt           string   `json:"ip_hash_salt"`
 	StorageLocation      string   `json:"storage_location"`
+}
+
+type DemoConfig struct {
+	EnableTestCompletion bool `json:"enable_test_completion"`
 }
 
 type ProtectedResource struct {
@@ -105,6 +111,9 @@ func applyEnv(cfg *Config) {
 	if v := os.Getenv("DATA_RESIDENCY_STORAGE_LOCATION"); v != "" {
 		cfg.DataResidency.StorageLocation = v
 	}
+	if v := os.Getenv("DEMO_ENABLE_TEST_COMPLETION"); v != "" {
+		cfg.Demo.EnableTestCompletion = v == "1" || strings.EqualFold(v, "true")
+	}
 }
 
 func (c *Config) validate() error {
@@ -160,7 +169,13 @@ func (c *Config) ValidateDataResidency() error {
 	if c.Provider == "mollie" && !hostAllowed("mollie.com", allowed) {
 		return fmt.Errorf("mollie provider requires mollie.com in data_residency.allowed_sub_processors")
 	}
+	if c.Mollie.RedirectURL == "" {
+		c.Mollie.RedirectURL = c.Gateway.BaseURL + "/payment/return"
+	}
 	if err := checkConfiguredEndpoint("mollie.webhook_url", c.Mollie.WebhookURL, allowed); err != nil {
+		return err
+	}
+	if err := checkConfiguredEndpoint("mollie.redirect_url", c.Mollie.RedirectURL, allowed); err != nil {
 		return err
 	}
 	return nil
@@ -239,8 +254,9 @@ func Default() *Config {
 		},
 		Provider: "mock",
 		Mollie: MollieConfig{
-			APIKeyEnv:  "MOLLIE_API_KEY",
-			WebhookURL: "http://localhost:3001/webhooks/payment",
+			APIKeyEnv:   "MOLLIE_API_KEY",
+			WebhookURL:  "http://localhost:3001/webhooks/payment",
+			RedirectURL: "http://localhost:3001/payment/return",
 		},
 		Ledger: LedgerConfig{
 			Path: "ledger/events.jsonl",
@@ -249,6 +265,9 @@ func Default() *Config {
 			Region:               "eu",
 			AllowedSubProcessors: []string{"mollie.com"},
 			StorageLocation:      "local append-only JSONL ledger",
+		},
+		Demo: DemoConfig{
+			EnableTestCompletion: true,
 		},
 		ProtectedResources: []ProtectedResource{
 			{

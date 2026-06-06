@@ -78,9 +78,23 @@ func (s *Server) InitiatePayment(ctx context.Context, req InitiateRequest) (Init
 	})
 
 	return InitiateResponse{
-		PaymentID: payment.ID,
-		Status:    string(payment.Status),
+		PaymentID:   payment.ID,
+		Status:      string(payment.Status),
+		CheckoutURL: payment.CheckoutURL,
 	}, nil
+}
+
+func (s *Server) CompleteTestPayment(ctx context.Context, paymentID string) error {
+	if paymentID == "" {
+		return fmt.Errorf("payment_id required")
+	}
+	if _, ok := s.grants.GetPendingGrant(paymentID); ok {
+		return nil
+	}
+	if err := s.provider.CompleteTestPayment(ctx, paymentID); err != nil {
+		return err
+	}
+	return s.HandleWebhookPaid(ctx, WebhookPayload{PaymentID: paymentID})
 }
 
 func (s *Server) HandleWebhookPaid(ctx context.Context, payload WebhookPayload) error {

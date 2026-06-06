@@ -12,18 +12,19 @@ import (
 	"sync"
 	"time"
 
+	"github.com/agentic-paywall/agentic-paywall/internal/payments"
 	mollieclient "github.com/mollie/mollie-api-golang"
 	"github.com/mollie/mollie-api-golang/models/components"
 	"github.com/mollie/mollie-api-golang/models/operations"
-	"github.com/agentic-paywall/agentic-paywall/internal/payments"
 )
 
 type Provider struct {
-	client     *mollieclient.Client
-	webhookURL string
-	httpClient *http.Client
-	mu         sync.Mutex
-	meta       map[string]paymentMeta
+	client      *mollieclient.Client
+	webhookURL  string
+	redirectURL string
+	httpClient  *http.Client
+	mu          sync.Mutex
+	meta        map[string]paymentMeta
 }
 
 type paymentMeta struct {
@@ -32,7 +33,7 @@ type paymentMeta struct {
 	Currency     string
 }
 
-func NewProvider(apiKeyEnv, webhookURL string) (*Provider, error) {
+func NewProvider(apiKeyEnv, webhookURL, redirectURL string) (*Provider, error) {
 	apiKey := os.Getenv(apiKeyEnv)
 	if apiKey == "" {
 		return nil, fmt.Errorf("mollie api key not set in env %s", apiKeyEnv)
@@ -41,10 +42,11 @@ func NewProvider(apiKeyEnv, webhookURL string) (*Provider, error) {
 		APIKey: mollieclient.String(apiKey),
 	}))
 	return &Provider{
-		client:     client,
-		webhookURL: webhookURL,
-		httpClient: &http.Client{Timeout: 15 * time.Second},
-		meta:       make(map[string]paymentMeta),
+		client:      client,
+		webhookURL:  webhookURL,
+		redirectURL: redirectURL,
+		httpClient:  &http.Client{Timeout: 15 * time.Second},
+		meta:        make(map[string]paymentMeta),
 	}, nil
 }
 
@@ -64,7 +66,7 @@ func (p *Provider) CreatePayment(ctx context.Context, req payments.CreatePayment
 			Value:    fmt.Sprintf("%.2f", amount),
 			Currency: req.Currency,
 		},
-		RedirectURL: mollieclient.String("https://example.com/payment/return"),
+		RedirectURL: mollieclient.String(p.redirectURL),
 		WebhookURL:  mollieclient.String(p.webhookURL),
 		Metadata: &components.Metadata{
 			MapOfAny: map[string]any{"resource_path": req.ResourcePath},

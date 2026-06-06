@@ -52,6 +52,13 @@ func TestValidateDataResidency(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name: "unlisted redirect url is rejected",
+			mutate: func(c *Config) {
+				c.Mollie.RedirectURL = "https://example.com/payment/return"
+			},
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
