@@ -3,6 +3,8 @@
 
 # Local config (may contain secrets)
 config.json
+DATA-RESIDENCY-LIVE.md
+/ledger/
 
 # Go
 *.exe

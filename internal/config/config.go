@@ -3,8 +3,11 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"strconv"
+	"strings"
 )
 
 type Config struct {
@@ -13,6 +16,8 @@ type Config struct {
 	Wallet             WalletConfig        `json:"wallet"`
 	Provider           string              `json:"provider"`
 	Mollie             MollieConfig        `json:"mollie"`
+	Ledger             LedgerConfig        `json:"ledger"`
+	DataResidency      DataResidencyConfig `json:"data_residency"`
 	ProtectedResources []ProtectedResource `json:"protected_resources"`
 }
 
@@ -24,13 +29,24 @@ type GatewayConfig struct {
 }
 
 type WalletConfig struct {
-	DailyBudget        float64 `json:"daily_budget"`
-	AutoPayThreshold   float64 `json:"auto_pay_threshold"`
+	DailyBudget      float64 `json:"daily_budget"`
+	AutoPayThreshold float64 `json:"auto_pay_threshold"`
 }
 
 type MollieConfig struct {
 	APIKeyEnv  string `json:"api_key_env"`
 	WebhookURL string `json:"webhook_url"`
+}
+
+type LedgerConfig struct {
+	Path string `json:"path"`
+}
+
+type DataResidencyConfig struct {
+	Region               string   `json:"region"`
+	AllowedSubProcessors []string `json:"allowed_sub_processors"`
+	IPHashSalt           string   `json:"ip_hash_salt"`
+	StorageLocation      string   `json:"storage_location"`
 }
 
 type ProtectedResource struct {
@@ -74,6 +90,21 @@ func applyEnv(cfg *Config) {
 			cfg.Gateway.GrantTTLSeconds = n
 		}
 	}
+	if v := os.Getenv("LEDGER_PATH"); v != "" {
+		cfg.Ledger.Path = v
+	}
+	if v := os.Getenv("DATA_RESIDENCY_REGION"); v != "" {
+		cfg.DataResidency.Region = v
+	}
+	if v := os.Getenv("DATA_RESIDENCY_ALLOWED_SUB_PROCESSORS"); v != "" {
+		cfg.DataResidency.AllowedSubProcessors = splitCSV(v)
+	}
+	if v := os.Getenv("DATA_RESIDENCY_IP_HASH_SALT"); v != "" {
+		cfg.DataResidency.IPHashSalt = v
+	}
+	if v := os.Getenv("DATA_RESIDENCY_STORAGE_LOCATION"); v != "" {
+		cfg.DataResidency.StorageLocation = v
+	}
 }
 
 func (c *Config) validate() error {
@@ -95,7 +126,102 @@ func (c *Config) validate() error {
 	if c.Provider == "" {
 		c.Provider = "mock"
 	}
+	if c.Ledger.Path == "" {
+		c.Ledger.Path = "ledger/events.jsonl"
+	}
+	if c.DataResidency.Region == "" {
+		c.DataResidency.Region = "eu"
+	}
+	if c.DataResidency.StorageLocation == "" {
+		c.DataResidency.StorageLocation = "local append-only JSONL ledger"
+	}
+	if len(c.DataResidency.AllowedSubProcessors) == 0 {
+		c.DataResidency.AllowedSubProcessors = []string{"mollie.com"}
+	}
+	if err := c.ValidateDataResidency(); err != nil {
+		return err
+	}
 	return nil
+}
+
+func (c *Config) ValidateDataResidency() error {
+	if !strings.HasPrefix(strings.ToLower(c.DataResidency.Region), "eu") {
+		return fmt.Errorf("data residency region must be EU, got %q", c.DataResidency.Region)
+	}
+
+	allowed := make(map[string]struct{}, len(c.DataResidency.AllowedSubProcessors))
+	for _, host := range c.DataResidency.AllowedSubProcessors {
+		normalized := normalizeHost(host)
+		if normalized != "" {
+			allowed[normalized] = struct{}{}
+		}
+	}
+
+	if c.Provider == "mollie" && !hostAllowed("mollie.com", allowed) {
+		return fmt.Errorf("mollie provider requires mollie.com in data_residency.allowed_sub_processors")
+	}
+	if err := checkConfiguredEndpoint("mollie.webhook_url", c.Mollie.WebhookURL, allowed); err != nil {
+		return err
+	}
+	return nil
+}
+
+func checkConfiguredEndpoint(name, rawURL string, allowed map[string]struct{}) error {
+	if rawURL == "" {
+		return nil
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil || parsed.Host == "" {
+		return fmt.Errorf("%s must be an absolute URL", name)
+	}
+	host := normalizeHost(parsed.Hostname())
+	if host == "" || isLocalHost(host) {
+		return nil
+	}
+	if hostAllowed(host, allowed) {
+		return nil
+	}
+	return fmt.Errorf("%s host %q is not in data_residency.allowed_sub_processors", name, host)
+}
+
+func hostAllowed(host string, allowed map[string]struct{}) bool {
+	host = normalizeHost(host)
+	for allowedHost := range allowed {
+		if host == allowedHost || strings.HasSuffix(host, "."+allowedHost) {
+			return true
+		}
+	}
+	return false
+}
+
+func isLocalHost(host string) bool {
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+func normalizeHost(host string) string {
+	host = strings.TrimSpace(strings.ToLower(host))
+	host = strings.TrimPrefix(host, "https://")
+	host = strings.TrimPrefix(host, "http://")
+	host = strings.TrimSuffix(host, "/")
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	return host
+}
+
+func splitCSV(value string) []string {
+	parts := strings.Split(value, ",")
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
 }
 
 func Default() *Config {
@@ -115,6 +241,14 @@ func Default() *Config {
 		Mollie: MollieConfig{
 			APIKeyEnv:  "MOLLIE_API_KEY",
 			WebhookURL: "http://localhost:3001/webhooks/payment",
+		},
+		Ledger: LedgerConfig{
+			Path: "ledger/events.jsonl",
+		},
+		DataResidency: DataResidencyConfig{
+			Region:               "eu",
+			AllowedSubProcessors: []string{"mollie.com"},
+			StorageLocation:      "local append-only JSONL ledger",
 		},
 		ProtectedResources: []ProtectedResource{
 			{

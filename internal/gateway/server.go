@@ -2,17 +2,22 @@ package gateway
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/agentic-paywall/agentic-paywall/internal/config"
+	"github.com/agentic-paywall/agentic-paywall/internal/ledger"
 	"github.com/agentic-paywall/agentic-paywall/internal/payments"
 )
+
+var ErrWebhookIgnored = errors.New("webhook ignored")
 
 type Server struct {
 	cfg      *config.Config
 	grants   *GrantStore
+	ledger   ledger.Ledger
 	provider payments.PaymentProvider
 	mu       sync.Mutex
 	payments map[string]paymentMeta
@@ -24,11 +29,16 @@ type paymentMeta struct {
 	Currency     string
 }
 
-func NewServer(cfg *config.Config, provider payments.PaymentProvider) *Server {
+func NewServer(cfg *config.Config, provider payments.PaymentProvider, ledgers ...ledger.Ledger) *Server {
 	ttl := time.Duration(cfg.Gateway.GrantTTLSeconds) * time.Second
+	l := ledger.Ledger(ledger.NopLedger{})
+	if len(ledgers) > 0 && ledgers[0] != nil {
+		l = ledgers[0]
+	}
 	return &Server{
 		cfg:      cfg,
 		grants:   NewGrantStore(cfg.Gateway.GrantSecret, ttl),
+		ledger:   l,
 		provider: provider,
 		payments: make(map[string]paymentMeta),
 	}
@@ -58,6 +68,15 @@ func (s *Server) InitiatePayment(ctx context.Context, req InitiateRequest) (Init
 	}
 	s.mu.Unlock()
 
+	appendLedger(s.ledger, ledger.Event{
+		Type:         "payment_initiated",
+		PaymentID:    payment.ID,
+		ResourcePath: req.ResourcePath,
+		Amount:       req.Amount,
+		Currency:     req.Currency,
+		Decision:     string(payment.Status),
+	})
+
 	return InitiateResponse{
 		PaymentID: payment.ID,
 		Status:    string(payment.Status),
@@ -65,13 +84,30 @@ func (s *Server) InitiatePayment(ctx context.Context, req InitiateRequest) (Init
 }
 
 func (s *Server) HandleWebhookPaid(ctx context.Context, payload WebhookPayload) error {
+	if _, ok := s.grants.GetPendingGrant(payload.PaymentID); ok {
+		return nil
+	}
+
+	payment, err := s.provider.GetPayment(ctx, payload.PaymentID)
+	if err != nil {
+		return ErrWebhookIgnored
+	}
+	if payment.Status != payments.StatusPaid {
+		return ErrWebhookIgnored
+	}
+
 	meta, ok := s.lookupPayment(payload.PaymentID)
 	if !ok {
-		meta = paymentMeta{
-			ResourcePath: payload.ResourcePath,
-			Amount:       payload.Amount,
-			Currency:     payload.Currency,
-		}
+		meta = paymentMeta{}
+	}
+	if meta.ResourcePath == "" {
+		meta.ResourcePath = payment.ResourcePath
+	}
+	if meta.Amount == "" {
+		meta.Amount = payment.Amount
+	}
+	if meta.Currency == "" {
+		meta.Currency = payment.Currency
 	}
 	if meta.ResourcePath == "" {
 		meta.ResourcePath = payload.ResourcePath
@@ -85,12 +121,28 @@ func (s *Server) HandleWebhookPaid(ctx context.Context, payload WebhookPayload) 
 	if meta.ResourcePath == "" || meta.Amount == "" || meta.Currency == "" {
 		return fmt.Errorf("missing payment metadata for %s", payload.PaymentID)
 	}
+	appendLedger(s.ledger, ledger.Event{
+		Type:         "payment_paid",
+		PaymentID:    payment.ID,
+		ResourcePath: meta.ResourcePath,
+		Amount:       meta.Amount,
+		Currency:     meta.Currency,
+		Decision:     "paid",
+	})
 
 	grant, err := s.grants.IssueGrant(meta.ResourcePath, payload.PaymentID, meta.Amount, meta.Currency)
 	if err != nil {
 		return err
 	}
 	s.grants.StorePendingGrant(payload.PaymentID, grant)
+	appendLedger(s.ledger, ledger.Event{
+		Type:         "grant_issued",
+		PaymentID:    payload.PaymentID,
+		ResourcePath: meta.ResourcePath,
+		Amount:       meta.Amount,
+		Currency:     meta.Currency,
+		Decision:     "granted",
+	})
 	return nil
 }
 

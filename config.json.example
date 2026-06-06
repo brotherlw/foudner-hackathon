@@ -15,6 +15,15 @@
     "api_key_env": "MOLLIE_API_KEY",
     "webhook_url": "http://localhost:3001/webhooks/payment"
   },
+  "ledger": {
+    "path": "ledger/events.jsonl"
+  },
+  "data_residency": {
+    "region": "eu",
+    "allowed_sub_processors": ["mollie.com"],
+    "ip_hash_salt": "dev-only-change-me",
+    "storage_location": "local append-only JSONL ledger"
+  },
   "protected_resources": [
     {
       "path": "/api/premium-report",

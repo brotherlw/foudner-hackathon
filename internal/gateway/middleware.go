@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/agentic-paywall/agentic-paywall/internal/ledger"
 )
 
 type ResourceConfig struct {
@@ -14,8 +16,9 @@ type ResourceConfig struct {
 }
 
 type PaywallConfig struct {
-	BaseURL   string
+	BaseURL      string
 	ChallengeTTL time.Duration
+	Ledger       ledger.Ledger
 }
 
 func PaywallMiddleware(cfg PaywallConfig, resource ResourceConfig, grants *GrantStore, next http.Handler) http.Handler {
@@ -23,9 +26,25 @@ func PaywallMiddleware(cfg PaywallConfig, resource ResourceConfig, grants *Grant
 		grantToken := extractGrantToken(r)
 		if grantToken != "" {
 			if _, err := grants.VerifyGrant(grantToken, resource.Path); err == nil {
+				appendLedger(cfg.Ledger, ledger.Event{
+					Type:         "access_granted",
+					ResourcePath: resource.Path,
+					Amount:       resource.Amount,
+					Currency:     resource.Currency,
+					AgentID:      r.Header.Get("AGENT-ID"),
+					Decision:     "granted",
+				})
 				next.ServeHTTP(w, r)
 				return
 			}
+			appendLedger(cfg.Ledger, ledger.Event{
+				Type:         "access_denied",
+				ResourcePath: resource.Path,
+				Amount:       resource.Amount,
+				Currency:     resource.Currency,
+				AgentID:      r.Header.Get("AGENT-ID"),
+				Decision:     "denied",
+			})
 		}
 
 		challenge := BuildChallenge(
@@ -51,8 +70,23 @@ func PaywallMiddleware(cfg PaywallConfig, resource ResourceConfig, grants *Grant
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("PAYMENT-REQUIRED", headerVal)
 		w.WriteHeader(http.StatusPaymentRequired)
+		appendLedger(cfg.Ledger, ledger.Event{
+			Type:         "challenge_issued",
+			ResourcePath: resource.Path,
+			Amount:       resource.Amount,
+			Currency:     resource.Currency,
+			AgentID:      r.Header.Get("AGENT-ID"),
+			Decision:     "denied",
+		})
 		_, _ = w.Write(body)
 	})
+}
+
+func appendLedger(l ledger.Ledger, event ledger.Event) {
+	if l == nil {
+		return
+	}
+	_ = l.Append(event)
 }
 
 func extractGrantToken(r *http.Request) string {

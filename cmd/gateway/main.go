@@ -1,8 +1,6 @@
 package main
 
 import (
-	"context"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -10,8 +8,9 @@ import (
 
 	"github.com/agentic-paywall/agentic-paywall/internal/config"
 	"github.com/agentic-paywall/agentic-paywall/internal/gateway"
-	"github.com/agentic-paywall/agentic-paywall/internal/payments"
+	"github.com/agentic-paywall/agentic-paywall/internal/ledger"
 	"github.com/agentic-paywall/agentic-paywall/internal/payments/setup"
+	"github.com/agentic-paywall/agentic-paywall/internal/residency"
 )
 
 func main() {
@@ -27,13 +26,20 @@ func main() {
 		log.Fatalf("provider: %v", err)
 	}
 
-	srv := gateway.NewServer(cfg, provider)
+	auditLedger := ledger.NewFileLedger(cfg.Ledger.Path)
+	statement := residency.FromConfig(cfg)
+	if err := residency.WriteMarkdown("DATA-RESIDENCY-LIVE.md", statement); err != nil {
+		log.Fatalf("data residency statement: %v", err)
+	}
+
+	srv := gateway.NewServer(cfg, provider, auditLedger)
 	mux := http.NewServeMux()
 
 	challengeTTL := 15 * time.Minute
 	paywallCfg := gateway.PaywallConfig{
 		BaseURL:      cfg.Gateway.BaseURL,
 		ChallengeTTL: challengeTTL,
+		Ledger:       auditLedger,
 	}
 
 	for _, res := range cfg.ProtectedResources {
@@ -55,11 +61,10 @@ func main() {
 
 	mux.Handle("/pay/initiate", &gateway.PayInitiateHandler{Initiator: srv})
 	mux.Handle("/grants/verify", &gateway.GrantVerifyHandler{Grants: srv.Grants()})
+	mux.Handle("/.well-known/data-residency", &gateway.DataResidencyHandler{Statement: statement})
 	mux.Handle("/webhooks/payment", &gateway.WebhookHandler{
 		Grants: srv.Grants(),
-		OnPaid: func(ctx context.Context, payload gateway.WebhookPayload) error {
-			return enrichAndHandlePaid(ctx, srv, provider, payload)
-		},
+		OnPaid: srv.HandleWebhookPaid,
 	})
 
 	addr := cfg.Gateway.ListenAddr
@@ -78,23 +83,4 @@ func loadConfig() (*config.Config, error) {
 		return config.Load(path)
 	}
 	return config.Default(), nil
-}
-
-func enrichAndHandlePaid(ctx context.Context, srv *gateway.Server, provider payments.PaymentProvider, payload gateway.WebhookPayload) error {
-	if payload.ResourcePath == "" || payload.Amount == "" || payload.Currency == "" {
-		payment, err := provider.GetPayment(ctx, payload.PaymentID)
-		if err != nil {
-			return fmt.Errorf("lookup payment: %w", err)
-		}
-		if payload.ResourcePath == "" {
-			payload.ResourcePath = payment.ResourcePath
-		}
-		if payload.Amount == "" {
-			payload.Amount = payment.Amount
-		}
-		if payload.Currency == "" {
-			payload.Currency = payment.Currency
-		}
-	}
-	return srv.HandleWebhookPaid(ctx, payload)
 }
