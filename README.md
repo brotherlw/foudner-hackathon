@@ -123,6 +123,121 @@ Or via query param:
 curl -s 'http://localhost:3001/api/premium-report?access_grant=ACCESS_GRANT_TOKEN_HERE'
 ```
 
+## Live browser demo on Windows
+
+This demo is designed to show the workflow as four side-by-side columns:
+
+1. Browser: the customer publisher site, `Examplepedia`
+2. PowerShell: gateway logs
+3. PowerShell: customer transaction ledger
+4. PowerShell: agent attack/payment flow
+
+Build the Windows gateway binary first:
+
+```powershell
+go build -o bin\gateway.exe .\cmd\gateway
+```
+
+### Window 1 - Gateway
+
+```powershell
+$repo = (Get-Location).Path
+
+$pid3001 = (Get-NetTCPConnection -LocalPort 3001 -State Listen -ErrorAction SilentlyContinue).OwningProcess
+if ($pid3001) { Stop-Process -Id $pid3001 -Force }
+
+cd $repo
+
+Remove-Item .\gateway.err.log, .\gateway.out.log -ErrorAction SilentlyContinue
+
+$p = Start-Process -FilePath .\bin\gateway.exe -WorkingDirectory $repo -RedirectStandardOutput gateway.out.log -RedirectStandardError gateway.err.log -PassThru
+
+Start-Sleep -Seconds 1
+
+start http://localhost:3001/demo
+
+Get-Content .\gateway.err.log -Wait
+```
+
+### Window 2 - Customer / Ledger
+
+```powershell
+$repo = (Get-Location).Path
+
+cd $repo
+
+if (!(Test-Path .\ledger\events.jsonl)) {
+  New-Item -ItemType File -Force .\ledger\events.jsonl | Out-Null
+}
+
+Get-Content .\ledger\events.jsonl -Wait
+```
+
+### Window 3 - Agent
+
+```powershell
+$repo = (Get-Location).Path
+
+cd $repo
+
+curl.exe -i http://localhost:3001/api/premium-report
+
+$initiateBody = @{
+  resource_path = "/api/premium-report"
+  amount = "0.50"
+  currency = "EUR"
+} | ConvertTo-Json -Compress
+
+$initiateBody | Set-Content initiate-payment.json -NoNewline
+
+$payment = curl.exe -s -X POST http://localhost:3001/pay/initiate -H "Content-Type: application/json" --data-binary "@initiate-payment.json" | ConvertFrom-Json
+
+$payment
+
+$completeBody = @{
+  payment_id = $payment.payment_id
+} | ConvertTo-Json -Compress
+
+$completeBody | Set-Content complete-test.json -NoNewline
+
+curl.exe -s -X POST http://localhost:3001/pay/complete-test -H "Content-Type: application/json" --data-binary "@complete-test.json"
+
+$grant = (curl.exe -s "http://localhost:3001/grants/verify?payment_id=$($payment.payment_id)" | ConvertFrom-Json).access_grant
+
+$grant.Substring(0, 24) + "..."
+
+curl.exe http://localhost:3001/api/premium-report -H "PAYMENT-GRANT: $grant"
+
+curl.exe -i http://localhost:3001/api/premium-report -H "PAYMENT-GRANT: $grant"
+```
+
+### Browser / DevTools
+
+Open:
+
+```text
+http://localhost:3001/demo
+```
+
+Open DevTools Console and refresh with `Ctrl+F5`. Examplepedia logs its browser-side traffic and also mirrors it inside the page:
+
+```text
+[customer] page loaded
+[customer] protected resource: /api/premium-report
+[customer] probe started
+[customer] -> residency /.well-known/data-residency
+[customer] <- residency status=200
+[customer] -> protected_without_grant /api/premium-report
+[customer] <- protected_without_grant status=402
+[customer] probe complete
+```
+
+You can run the probe again from DevTools:
+
+```javascript
+examplepediaProbe()
+```
+
 ## Demo agent prompt
 
 > Fetch the market summary at http://localhost:3001/api/premium-report. If you receive a 402 payment required response, use your wallet tools to pay and obtain an access grant, then retry the request with the grant to retrieve the content.
