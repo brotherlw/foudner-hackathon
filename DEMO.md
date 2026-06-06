@@ -88,8 +88,12 @@ PowerShell:
 ```powershell
 curl.exe http://localhost:3001/.well-known/data-residency
 curl.exe -i http://localhost:3001/api/premium-report
-$payment = curl.exe -X POST http://localhost:3001/pay/initiate -H "Content-Type: application/json" -d '{\"resource_path\":\"/api/premium-report\",\"amount\":\"0.50\",\"currency\":\"EUR\"}' | ConvertFrom-Json
-curl.exe -X POST http://localhost:3001/pay/complete-test -H "Content-Type: application/json" -d "{`"payment_id`":`"$($payment.payment_id)`"}"
+$initiateBody = @{ resource_path = "/api/premium-report"; amount = "0.50"; currency = "EUR" } | ConvertTo-Json -Compress
+$initiateBody | Set-Content initiate-payment.json -NoNewline
+$payment = curl.exe -X POST http://localhost:3001/pay/initiate -H "Content-Type: application/json" --data-binary "@initiate-payment.json" | ConvertFrom-Json
+$completeBody = @{ payment_id = $payment.payment_id } | ConvertTo-Json -Compress
+$completeBody | Set-Content complete-test.json -NoNewline
+curl.exe -X POST http://localhost:3001/pay/complete-test -H "Content-Type: application/json" --data-binary "@complete-test.json"
 $grant = (curl.exe "http://localhost:3001/grants/verify?payment_id=$($payment.payment_id)" | ConvertFrom-Json).access_grant
 curl.exe http://localhost:3001/api/premium-report -H "PAYMENT-GRANT: $grant"
 Get-Content .\ledger\events.jsonl

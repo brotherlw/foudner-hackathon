@@ -31,11 +31,16 @@ Key settings:
 | Field | Description |
 |---|---|
 | `provider` | `mock` (default) or `mollie` |
-| `gateway.grant_secret` | HMAC secret for access grants |
+| `gateway.grant_private_key_path` | Ed25519 private key path; generated on first boot |
+| `gateway.grant_quota` | Number of content requests allowed per grant |
+| `ledger.path` | In-region append-only JSONL audit ledger |
+| `data_residency.region` | Must be EU-prefixed, e.g. `eu` |
+| `demo.enable_test_completion` | Enables `/pay/complete-test` for local/test demos |
 | `wallet.daily_budget` | MCP daily EUR spend limit |
 | `wallet.auto_pay_threshold` | Payments above this require stderr Y/N approval |
 
-Environment overrides: `GATEWAY_URL`, `PAYMENT_PROVIDER`, `CONFIG_PATH`, `MOLLIE_API_KEY`.
+Environment overrides: `GATEWAY_URL`, `PAYMENT_PROVIDER`, `CONFIG_PATH`, `MOLLIE_API_KEY`,
+`LEDGER_PATH`, `GRANT_PRIVATE_KEY_PATH`, `GRANT_QUOTA`, and `DEMO_ENABLE_TEST_COMPLETION`.
 
 ## Run
 
@@ -71,6 +76,20 @@ Add to your Cursor MCP settings:
 
 ## Demo curl commands
 
+For the scripted demo, see `DEMO.md`.
+
+PowerShell:
+
+```powershell
+.\scripts\demo.ps1
+```
+
+Linux/macOS/Git Bash:
+
+```bash
+sh ./scripts/demo.sh
+```
+
 **1. Without grant → 402 (no content leakage):**
 
 ```bash
@@ -91,7 +110,7 @@ curl -s -X POST http://localhost:3001/pay/initiate \
 curl -s 'http://localhost:3001/grants/verify?payment_id=PAYMENT_ID_HERE'
 ```
 
-**4. Retry with grant → 200 + premium content:**
+**4. Retry with grant → 200 + premium content** (until `gateway.grant_quota` is exhausted):
 
 ```bash
 curl -s http://localhost:3001/api/premium-report \
@@ -136,10 +155,31 @@ export PAYMENT_PROVIDER=mollie
 ./bin/gateway
 ```
 
-Use Mollie's test mode `changePaymentState` or complete checkout to trigger the webhook.
+Use `/pay/complete-test` in local/test demos to call Mollie's test-mode completion path and then verify
+the payment before issuing a grant.
+
+## Data residency
+
+The gateway serves a live machine-readable residency statement:
+
+```bash
+curl http://localhost:3001/.well-known/data-residency
+```
+
+It reports EU region processing, configured sub-processors, `raw_ip_retained:false`, and
+`cross_border_transfer:false`. Runtime access decisions are appended to `ledger/events.jsonl`.
+
+## Public grant key
+
+Access grants are Ed25519-signed JWTs. The gateway serves the public key for edge verification:
+
+```bash
+curl http://localhost:3001/.well-known/agent-paywall-key
+```
 
 ## AgentPaywall v1
 
 402 responses include JSON with `agent_paywall_version`, `accepts`, and `retry_with` fields, plus a `PAYMENT-REQUIRED` header containing the base64-encoded challenge.
 
-Access grants are HMAC-signed JWTs scoped to a resource path with TTL and JTI replay protection.
+Access grants are Ed25519-signed JWTs scoped to a resource path with TTL, JTI-keyed quota tracking,
+and public-key verification support for edge enforcement.
