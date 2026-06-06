@@ -132,6 +132,29 @@ This demo is designed to show the workflow as four side-by-side columns:
 3. PowerShell: customer transaction ledger
 4. PowerShell: agent attack/payment flow
 
+Short version from the repo root:
+
+```powershell
+# Window 1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\gateway_test.ps1
+
+# Window 2
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\customer_test.ps1
+
+# Window 3
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\agent_test.ps1
+```
+
+If you want function-style one-liners in each terminal:
+
+```powershell
+. .\scripts\demo-aliases.ps1; gateway_test
+. .\scripts\demo-aliases.ps1; customer_test
+. .\scripts\demo-aliases.ps1; agent_test
+```
+
+The typo-friendly `gateaway_test` alias is also available. The same commands are listed in `scripts/windows-demo.yaml`.
+
 Build the Windows gateway binary first:
 
 ```powershell
@@ -141,6 +164,8 @@ go build -o bin\gateway.exe .\cmd\gateway
 ### Window 1 - Gateway
 
 ```powershell
+cd C:\path\to\foudner-hackathon
+
 $repo = (Get-Location).Path
 
 $pid3001 = (Get-NetTCPConnection -LocalPort 3001 -State Listen -ErrorAction SilentlyContinue).OwningProcess
@@ -162,6 +187,8 @@ Get-Content .\gateway.err.log -Wait
 ### Window 2 - Customer / Ledger
 
 ```powershell
+cd C:\path\to\foudner-hackathon
+
 $repo = (Get-Location).Path
 
 cd $repo
@@ -176,6 +203,8 @@ Get-Content .\ledger\events.jsonl -Wait
 ### Window 3 - Agent
 
 ```powershell
+cd C:\path\to\foudner-hackathon
+
 $repo = (Get-Location).Path
 
 cd $repo
@@ -236,6 +265,12 @@ You can run the probe again from DevTools:
 
 ```javascript
 examplepediaProbe()
+```
+
+To run the full browser payment test, click **Run Payment Test** on the Examplepedia page or run:
+
+```javascript
+examplepediaRunFlow()
 ```
 
 ## Demo agent prompt

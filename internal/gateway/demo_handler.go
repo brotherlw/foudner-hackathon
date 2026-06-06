@@ -133,6 +133,27 @@ const browserDemoHTML = `<!doctype html>
       color: #f4f7fb;
       border-color: #101418;
     }
+    .actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin: 12px 0;
+      font-family: Arial, sans-serif;
+    }
+    button {
+      min-height: 38px;
+      border: 1px solid #202122;
+      background: #202122;
+      color: #fff;
+      padding: 0 12px;
+      border-radius: 4px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
     .small {
       font-family: Arial, sans-serif;
       font-size: 13px;
@@ -175,9 +196,15 @@ const browserDemoHTML = `<!doctype html>
     <h2>Developer Console Probe</h2>
     <p class="small">
       Open DevTools Console to watch this customer website make browser-side probe requests. You can
-      also run <code>examplepediaProbe()</code> again manually.
+      also run <code>examplepediaProbe()</code> or <code>examplepediaRunFlow()</code> manually.
     </p>
-    <pre>examplepediaProbe()</pre>
+    <pre>examplepediaProbe()
+examplepediaRunFlow()</pre>
+
+    <div class="actions">
+      <button id="runFlow" type="button">Run Payment Test</button>
+      <span class="small">Runs the old browser payment test from inside Examplepedia.</span>
+    </div>
 
     <h2>Browser Traffic Mirror</h2>
     <p class="small">
@@ -188,6 +215,7 @@ const browserDemoHTML = `<!doctype html>
 
   <script>
     const browserFeed = document.querySelector("#browserFeed");
+    const runFlow = document.querySelector("#runFlow");
 
     function customerLog(message, payload) {
       const line = "[" + new Date().toLocaleTimeString() + "] " + message;
@@ -215,11 +243,70 @@ const browserDemoHTML = `<!doctype html>
       return { status: resp.status, body };
     }
 
+    function requireStatus(label, result, expected) {
+      if (result.status !== expected) {
+        throw new Error(label + " expected HTTP " + expected + ", got " + result.status);
+      }
+    }
+
     window.examplepediaProbe = async function examplepediaProbe() {
       customerLog("[customer] probe started");
       await logFetch("residency", "/.well-known/data-residency");
       await logFetch("protected_without_grant", "/api/premium-report");
       customerLog("[customer] probe complete");
+    };
+
+    window.examplepediaRunFlow = async function examplepediaRunFlow() {
+      runFlow.disabled = true;
+      try {
+        customerLog("[agent] full payment test started");
+
+        await logFetch("residency", "/.well-known/data-residency");
+
+        const challenge = await logFetch("protected_without_grant", "/api/premium-report");
+        requireStatus("protected_without_grant", challenge, 402);
+
+        const initiate = await logFetch("initiate_payment", "/pay/initiate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            resource_path: "/api/premium-report",
+            amount: "0.50",
+            currency: "EUR"
+          })
+        });
+        requireStatus("initiate_payment", initiate, 200);
+        const paymentID = initiate.body.payment_id;
+        customerLog("[agent] payment_id=" + paymentID + " amount=0.50 currency=EUR");
+
+        const complete = await logFetch("complete_test_payment", "/pay/complete-test", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ payment_id: paymentID })
+        });
+        requireStatus("complete_test_payment", complete, 200);
+
+        const grant = await logFetch("verify_grant", "/grants/verify?payment_id=" + encodeURIComponent(paymentID));
+        requireStatus("verify_grant", grant, 200);
+        customerLog("[agent] grant_preview=" + grant.body.access_grant.slice(0, 24) + "...");
+
+        const content = await logFetch("protected_with_grant", "/api/premium-report", {
+          headers: { "PAYMENT-GRANT": grant.body.access_grant }
+        });
+        requireStatus("protected_with_grant", content, 200);
+
+        const quota = await logFetch("same_grant_again", "/api/premium-report", {
+          headers: { "PAYMENT-GRANT": grant.body.access_grant }
+        });
+        requireStatus("same_grant_again", quota, 402);
+
+        customerLog("[agent] full payment test complete");
+      } catch (err) {
+        customerLog("[agent] full payment test failed", { error: err.message || String(err) });
+        console.error("[agent] full payment test failed", err);
+      } finally {
+        runFlow.disabled = false;
+      }
     };
 
     window.addEventListener("load", function () {
@@ -228,6 +315,10 @@ const browserDemoHTML = `<!doctype html>
           console.error("[customer] probe_failed", err);
         });
       }, 500);
+    });
+
+    runFlow.addEventListener("click", function () {
+      window.examplepediaRunFlow();
     });
   </script>
 </body>

@@ -12,3 +12,7 @@ DATA-RESIDENCY-LIVE.md
 *.exe
 *.test
 *.out
+
+# Demo scratch files
+/initiate-payment.json
+/complete-test.json

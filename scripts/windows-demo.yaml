@@ -1,0 +1,19 @@
+run_from: repo_root
+browser: http://localhost:3001/demo
+terminals:
+  gateway_test:
+    description: Build, restart, and watch the gateway.
+    command: powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\gateway_test.ps1
+    alias_command: . .\scripts\demo-aliases.ps1; gateway_test
+  gateaway_test:
+    description: Typo-friendly alias for gateway_test.
+    command: powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\gateaway_test.ps1
+    alias_command: . .\scripts\demo-aliases.ps1; gateaway_test
+  customer_test:
+    description: Watch new customer ledger events.
+    command: powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\customer_test.ps1
+    alias_command: . .\scripts\demo-aliases.ps1; customer_test
+  agent_test:
+    description: Run the full agent payment flow.
+    command: powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\agent_test.ps1
+    alias_command: . .\scripts\demo-aliases.ps1; agent_test
