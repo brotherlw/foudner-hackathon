@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -80,6 +81,7 @@ func (s *Server) InitiatePayment(ctx context.Context, req InitiateRequest) (Init
 		Currency:     req.Currency,
 		Decision:     string(payment.Status),
 	})
+	log.Printf("gateway payment_initiated payment_id=%s resource=%s amount=%s currency=%s status=%s", payment.ID, req.ResourcePath, req.Amount, req.Currency, payment.Status)
 
 	return InitiateResponse{
 		PaymentID:   payment.ID,
@@ -93,11 +95,13 @@ func (s *Server) CompleteTestPayment(ctx context.Context, paymentID string) erro
 		return fmt.Errorf("payment_id required")
 	}
 	if _, ok := s.grants.GetPendingGrant(paymentID); ok {
+		log.Printf("gateway test_payment_complete payment_id=%s result=already_granted", paymentID)
 		return nil
 	}
 	if err := s.provider.CompleteTestPayment(ctx, paymentID); err != nil {
 		return err
 	}
+	log.Printf("gateway test_payment_complete payment_id=%s result=completed", paymentID)
 	return s.HandleWebhookPaid(ctx, WebhookPayload{PaymentID: paymentID})
 }
 
@@ -108,9 +112,11 @@ func (s *Server) HandleWebhookPaid(ctx context.Context, payload WebhookPayload) 
 
 	payment, err := s.provider.GetPayment(ctx, payload.PaymentID)
 	if err != nil {
+		log.Printf("gateway webhook_ignored payment_id=%s reason=payment_lookup_failed", payload.PaymentID)
 		return ErrWebhookIgnored
 	}
 	if payment.Status != payments.StatusPaid {
+		log.Printf("gateway webhook_ignored payment_id=%s status=%s", payload.PaymentID, payment.Status)
 		return ErrWebhookIgnored
 	}
 
@@ -147,6 +153,7 @@ func (s *Server) HandleWebhookPaid(ctx context.Context, payload WebhookPayload) 
 		Currency:     meta.Currency,
 		Decision:     "paid",
 	})
+	log.Printf("gateway payment_paid payment_id=%s resource=%s amount=%s currency=%s", payment.ID, meta.ResourcePath, meta.Amount, meta.Currency)
 
 	grant, err := s.grants.IssueGrant(meta.ResourcePath, payload.PaymentID, meta.Amount, meta.Currency)
 	if err != nil {
@@ -161,6 +168,7 @@ func (s *Server) HandleWebhookPaid(ctx context.Context, payload WebhookPayload) 
 		Currency:     meta.Currency,
 		Decision:     "granted",
 	})
+	log.Printf("gateway grant_issued payment_id=%s resource=%s amount=%s currency=%s quota=%d", payload.PaymentID, meta.ResourcePath, meta.Amount, meta.Currency, s.grants.Quota())
 	return nil
 }
 

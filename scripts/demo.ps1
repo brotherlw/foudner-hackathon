@@ -14,11 +14,18 @@ function Write-Step {
 
 Write-Step "Data residency statement"
 curl.exe -fsS "$BaseUrl/.well-known/data-residency"
+if ($LASTEXITCODE -ne 0) {
+    throw "gateway is not reachable at $BaseUrl; start bin\gateway.exe first"
+}
 Write-Host ""
 
 Write-Step "Request protected content without a grant; expect HTTP 402"
 $challengePath = Join-Path $env:TEMP "agentic-paywall-challenge.json"
+Remove-Item $challengePath -ErrorAction SilentlyContinue
 $status = curl.exe -sS -o $challengePath -w "%{http_code}" "$BaseUrl$ResourcePath"
+if ($status -eq "000") {
+    throw "gateway is not reachable at $BaseUrl; start bin\gateway.exe first"
+}
 Get-Content $challengePath
 Write-Host "HTTP $status"
 if ($status -ne "402") {

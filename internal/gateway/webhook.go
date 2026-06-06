@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"net/http"
 )
 
@@ -53,6 +54,7 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		payload.Status = "paid"
 	}
 	if payload.Status != "paid" {
+		log.Printf("gateway webhook_ignored payment_id=%s status=%s", payload.PaymentID, payload.Status)
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"ok":true,"ignored":true}`))
 		return
@@ -60,6 +62,7 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h.OnPaid != nil {
 		if err := h.OnPaid(r.Context(), payload); err != nil {
 			if errors.Is(err, ErrWebhookIgnored) {
+				log.Printf("gateway webhook_ignored payment_id=%s reason=not_paid_or_unknown", payload.PaymentID)
 				w.WriteHeader(http.StatusOK)
 				_, _ = w.Write([]byte(`{"ok":true,"ignored":true}`))
 				return

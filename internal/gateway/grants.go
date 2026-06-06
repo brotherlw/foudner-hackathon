@@ -86,6 +86,10 @@ func (s *GrantStore) PublicKeyBase64() string {
 	return base64.StdEncoding.EncodeToString(s.publicKey)
 }
 
+func (s *GrantStore) Quota() int {
+	return s.quota
+}
+
 func (s *GrantStore) IssueGrant(resourcePath, paymentID, amount, currency string) (string, error) {
 	jti, err := randomID()
 	if err != nil {

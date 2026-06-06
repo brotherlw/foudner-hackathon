@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 )
 
@@ -52,6 +53,7 @@ func (h *CompleteTestPaymentHandler) ServeHTTP(w http.ResponseWriter, r *http.Re
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	log.Printf("gateway complete_test_payment payment_id=%s", req.PaymentID)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(CompleteTestPaymentResponse{OK: true, PaymentID: req.PaymentID})
 }

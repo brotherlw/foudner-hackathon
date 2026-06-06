@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 )
 
@@ -31,6 +32,7 @@ func (h *GrantVerifyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if ok {
 		resp.AccessGrant = grant
 	}
+	log.Printf("gateway grant_verify payment_id=%s ready=%t", paymentID, ok)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)
 }

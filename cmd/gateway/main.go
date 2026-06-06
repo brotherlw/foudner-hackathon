@@ -64,6 +64,7 @@ func main() {
 		Completer: srv,
 		Enabled:   cfg.Demo.EnableTestCompletion,
 	})
+	mux.Handle("/demo", gateway.BrowserDemoHandler())
 	mux.Handle("/grants/verify", &gateway.GrantVerifyHandler{Grants: srv.Grants()})
 	mux.Handle("/.well-known/agent-paywall-key", &gateway.PublicKeyHandler{Grants: srv.Grants()})
 	mux.Handle("/.well-known/data-residency", &gateway.DataResidencyHandler{Statement: statement})
