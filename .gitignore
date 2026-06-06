@@ -1,0 +1,10 @@
+# Binaries
+/bin/
+
+# Local config (may contain secrets)
+config.json
+
+# Go
+*.exe
+*.test
+*.out

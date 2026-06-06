@@ -1,0 +1,26 @@
+{
+  "currency": "EUR",
+  "gateway": {
+    "listen_addr": ":3001",
+    "grant_secret": "dev-only-change-me",
+    "grant_ttl_seconds": 3600,
+    "base_url": "http://localhost:3001"
+  },
+  "wallet": {
+    "daily_budget": 5.00,
+    "auto_pay_threshold": 1.00
+  },
+  "provider": "mock",
+  "mollie": {
+    "api_key_env": "MOLLIE_API_KEY",
+    "webhook_url": "http://localhost:3001/webhooks/payment"
+  },
+  "protected_resources": [
+    {
+      "path": "/api/premium-report",
+      "amount": "0.50",
+      "currency": "EUR",
+      "description": "Premium market summary report"
+    }
+  ]
+}
