@@ -1,5 +1,7 @@
 # Agentic Content Paywall
 
+Made at the Founders Hackaton by AI Beavers, Hamburg. 
+
 Go-based HTTP content gateway that blocks machine clients behind a machine-readable **402 paywall** until payment is verified — with a thin payment MCP as the agent-side wallet client.
 
 ## Prerequisites
